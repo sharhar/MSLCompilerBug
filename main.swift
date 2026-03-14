@@ -430,11 +430,7 @@ func makeBinaryArchive(device: MTLDevice, descriptor: MTLComputePipelineDescript
     try archive.serialize(to: url)
 }
 
-func renderSection(title: String, lines: [String]) -> String {
-    ([title] + lines).joined(separator: "\n") + "\n"
-}
-
-func emitArtifacts(compiledVariants: [CompiledVariant], device: MTLDevice, rootPath: String, diagnostics: RunDiagnostics) throws {
+func emitArtifacts(compiledVariants: [CompiledVariant], device: MTLDevice, rootPath: String, stdoutText: String) throws {
     let fileManager = FileManager.default
     let directory = URL(fileURLWithPath: rootPath, isDirectory: true)
     try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -442,14 +438,8 @@ func emitArtifacts(compiledVariants: [CompiledVariant], device: MTLDevice, rootP
     var manifestLines = [
         "artifact_dir: \(directory.path)",
         "",
+        "variant_directories:",
     ]
-    manifestLines.append(contentsOf: diagnosticLines(diagnostics.configFields))
-    manifestLines.append("")
-    manifestLines.append(contentsOf: diagnosticLines(diagnostics.environmentFields))
-    manifestLines.append("")
-    manifestLines.append(contentsOf: diagnosticLines(diagnostics.featureFields))
-    manifestLines.append("")
-    manifestLines.append("variant_directories:")
 
     for compiledVariant in compiledVariants {
         let variantDirectory = directory.appendingPathComponent(compiledVariant.variant.slug, isDirectory: true)
@@ -476,13 +466,26 @@ func emitArtifacts(compiledVariants: [CompiledVariant], device: MTLDevice, rootP
     }
 
     try writeText(manifestLines.joined(separator: "\n"), to: directory.appendingPathComponent("manifest.txt"))
-    let environmentReport = [
-        renderSection(title: "[config]", lines: diagnosticLines(diagnostics.configFields)),
-        renderSection(title: "[environment]", lines: diagnosticLines(diagnostics.environmentFields)),
-        renderSection(title: "[features]", lines: diagnosticLines(diagnostics.featureFields)),
-        renderSection(title: "[variants]", lines: variantSummaryLines(compiledVariants: compiledVariants)),
-    ].joined(separator: "\n")
-    try writeText(environmentReport, to: directory.appendingPathComponent("environment.txt"))
+    try writeText(stdoutText, to: directory.appendingPathComponent("stdout.txt"))
+}
+
+func makeReportLines(diagnostics: RunDiagnostics, compiledVariants: [CompiledVariant]) -> [String] {
+    var lines = ["Metal barrier repro", ""]
+
+    lines.append("[config]")
+    lines.append(contentsOf: diagnosticLines(diagnostics.configFields))
+    lines.append("")
+    lines.append("[environment]")
+    lines.append(contentsOf: diagnosticLines(diagnostics.environmentFields))
+    lines.append("")
+    lines.append("[features]")
+    lines.append(contentsOf: diagnosticLines(diagnostics.featureFields))
+    lines.append("")
+    lines.append("[variants]")
+    lines.append(contentsOf: variantSummaryLines(compiledVariants: compiledVariants))
+    lines.append("")
+
+    return lines
 }
 
 guard let device = MTLCreateSystemDefaultDevice() else {
@@ -495,28 +498,10 @@ let variants = makeVariants()
 do {
     let compiledVariants = try variants.map { try compileVariant($0, device: device) }
     let diagnostics = makeRunDiagnostics(config: config, device: device)
-
-    if config.dumpArtifacts {
-        try emitArtifacts(compiledVariants: compiledVariants, device: device, rootPath: config.artifactDirectory, diagnostics: diagnostics)
-    }
+    var reportLines = makeReportLines(diagnostics: diagnostics, compiledVariants: compiledVariants)
 
     let reference = try run(compiledVariant: compiledVariants[0], groups: config.groups, device: device)
     var observedFailure = false
-
-    print("Metal barrier repro")
-    print("")
-    print("[config]")
-    diagnosticLines(diagnostics.configFields).forEach { print($0) }
-    print("")
-    print("[environment]")
-    diagnosticLines(diagnostics.environmentFields).forEach { print($0) }
-    print("")
-    print("[features]")
-    diagnosticLines(diagnostics.featureFields).forEach { print($0) }
-    print("")
-    print("[variants]")
-    variantSummaryLines(compiledVariants: compiledVariants).forEach { print($0) }
-    print("")
 
     for compiledVariant in compiledVariants {
         var worst = Result(variant: compiledVariant.variant, mismatchCount: 0, firstMismatch: nil, expected: nil, actual: nil)
@@ -530,7 +515,7 @@ do {
         }
 
         if worst.mismatchCount == 0 {
-            print("\(compiledVariant.variant.name): PASS")
+            reportLines.append("\(compiledVariant.variant.name): PASS")
         } else {
             observedFailure = true
             let firstIndex = worst.firstMismatch!
@@ -539,16 +524,27 @@ do {
             let mismatchPercent = Double(worst.mismatchCount) / Double(reference.count) * 100.0
             let delta = worst.actual! - worst.expected!
             let mismatchPercentText = String(format: "%.2f", mismatchPercent)
-            print("\(compiledVariant.variant.name): FAIL mismatches=\(worst.mismatchCount) mismatchPercent=\(mismatchPercentText)% firstIndex=\(firstIndex) firstGroup=\(firstGroup) firstLane=\(firstLane) expected=\(format(worst.expected!)) actual=\(format(worst.actual!)) delta=\(format(delta))")
+            reportLines.append("\(compiledVariant.variant.name): FAIL mismatches=\(worst.mismatchCount) mismatchPercent=\(mismatchPercentText)% firstIndex=\(firstIndex) firstGroup=\(firstGroup) firstLane=\(firstLane) expected=\(format(worst.expected!)) actual=\(format(worst.actual!)) delta=\(format(delta))")
         }
     }
 
-    print("")
+    reportLines.append("")
     if observedFailure {
-        print("overall: FAIL")
+        reportLines.append("overall: FAIL")
+    } else {
+        reportLines.append("overall: PASS")
+    }
+
+    let stdoutText = reportLines.joined(separator: "\n") + "\n"
+    print(stdoutText, terminator: "")
+
+    if config.dumpArtifacts {
+        try emitArtifacts(compiledVariants: compiledVariants, device: device, rootPath: config.artifactDirectory, stdoutText: stdoutText)
+    }
+
+    if observedFailure {
         exit(1)
     } else {
-        print("overall: PASS")
         exit(0)
     }
 } catch {

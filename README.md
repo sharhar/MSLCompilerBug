@@ -53,6 +53,11 @@ When `--dump-runtime-artifacts` is enabled the Swift repro creates one directory
 - `<variant>.binarchive`: runtime binary archive emitted through `MTLBinaryArchive`
 - `metadata.txt`: pipeline properties such as `threadExecutionWidth`
 
+At the artifact root, the Swift repro also writes:
+
+- `manifest.txt`: artifact directory and per-variant paths
+- `stdout.txt`: exact stdout from the repro run, including diagnostics and test results
+
 After that, `./disassemble.sh --artifact-dir <path>` adds:
 
 - `<variant>.air`: AIR emitted by `xcrun metal`
