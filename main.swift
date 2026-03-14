@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Metal
 
@@ -141,6 +142,17 @@ struct Result {
     let actual: SIMD2<Float>?
 }
 
+struct DiagnosticField {
+    let key: String
+    let value: String
+}
+
+struct RunDiagnostics {
+    let configFields: [DiagnosticField]
+    let environmentFields: [DiagnosticField]
+    let featureFields: [DiagnosticField]
+}
+
 struct Uniforms {
     var groups: UInt32
 }
@@ -238,6 +250,173 @@ func format(_ value: SIMD2<Float>) -> String {
     String(format: "(%.6f, %.6f)", value.x, value.y)
 }
 
+func formattedBytes(_ value: UInt64) -> String {
+    ByteCountFormatter.string(fromByteCount: Int64(value), countStyle: .binary)
+}
+
+func formattedBytes(_ value: Int) -> String {
+    formattedBytes(UInt64(value))
+}
+
+func formattedBool(_ value: Bool) -> String {
+    value ? "yes" : "no"
+}
+
+func currentProcessArchitecture() -> String {
+#if arch(arm64)
+    return "arm64"
+#elseif arch(x86_64)
+    return "x86_64"
+#else
+    return "unknown"
+#endif
+}
+
+func sysctlString(_ name: String) -> String? {
+    var size = 0
+    guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else {
+        return nil
+    }
+
+    var buffer = [CChar](repeating: 0, count: size)
+    guard sysctlbyname(name, &buffer, &size, nil, 0) == 0 else {
+        return nil
+    }
+
+    return String(cString: buffer)
+}
+
+func sysctlInt32(_ name: String) -> Int32? {
+    var value: Int32 = 0
+    var size = MemoryLayout<Int32>.size
+    guard sysctlbyname(name, &value, &size, nil, 0) == 0 else {
+        return nil
+    }
+    return value
+}
+
+func machineArchitecture() -> String {
+    sysctlString("hw.machine") ?? "unavailable"
+}
+
+func kernelVersion() -> String {
+    let sysname = sysctlString("kern.ostype") ?? "Darwin"
+    let release = sysctlString("kern.osrelease") ?? "unavailable"
+    let version = sysctlString("kern.version") ?? "unavailable"
+    return "\(sysname) \(release) (\(version))"
+}
+
+func rosettaStatus() -> String {
+    guard let translated = sysctlInt32("sysctl.proc_translated") else {
+        return "unavailable"
+    }
+    return translated == 1 ? "yes" : "no"
+}
+
+func formatThreadgroupSize(_ size: MTLSize) -> String {
+    "\(size.width)x\(size.height)x\(size.depth)"
+}
+
+func describeDeviceLocation(_ device: MTLDevice) -> String {
+    if #available(macOS 13.0, *) {
+        switch device.location {
+        case .builtIn:
+            return "builtIn"
+        case .slot:
+            return "slot \(device.locationNumber)"
+        case .external:
+            return "external \(device.locationNumber)"
+        case .unspecified:
+            return "unspecified"
+        @unknown default:
+            return "unknown"
+        }
+    }
+
+    return "unavailable"
+}
+
+func supportedFamilies(for device: MTLDevice) -> [String] {
+    var families: [String] = []
+
+    if #available(macOS 10.15, *) {
+        let familyChecks: [(String, MTLGPUFamily)] = [
+            ("apple1", .apple1),
+            ("apple2", .apple2),
+            ("apple3", .apple3),
+            ("apple4", .apple4),
+            ("apple5", .apple5),
+            ("apple6", .apple6),
+            ("apple7", .apple7),
+            ("apple8", .apple8),
+            ("apple9", .apple9),
+            ("mac1", .mac1),
+            ("mac2", .mac2),
+        ]
+
+        families = familyChecks.compactMap { label, family in
+            device.supportsFamily(family) ? label : nil
+        }
+    }
+
+    return families
+}
+
+func makeRunDiagnostics(config: Config, device: MTLDevice) -> RunDiagnostics {
+    let processInfo = ProcessInfo.processInfo
+    let osVersion = processInfo.operatingSystemVersion
+
+    let configFields = [
+        DiagnosticField(key: "groups", value: "\(config.groups)"),
+        DiagnosticField(key: "iterations", value: "\(config.iterations)"),
+        DiagnosticField(key: "reference", value: "fence baseline"),
+        DiagnosticField(key: "dump_runtime_artifacts", value: formattedBool(config.dumpArtifacts)),
+        DiagnosticField(key: "artifact_dir", value: config.dumpArtifacts ? config.artifactDirectory : "disabled"),
+    ]
+
+    var environmentFields = [
+        DiagnosticField(key: "macos_version", value: processInfo.operatingSystemVersionString),
+        DiagnosticField(key: "macos_semver", value: "\(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)"),
+        DiagnosticField(key: "kernel_version", value: kernelVersion()),
+        DiagnosticField(key: "process_arch", value: currentProcessArchitecture()),
+        DiagnosticField(key: "machine_arch", value: machineArchitecture()),
+        DiagnosticField(key: "machine_model", value: sysctlString("hw.model") ?? "unavailable"),
+        DiagnosticField(key: "rosetta_translated", value: rosettaStatus()),
+        DiagnosticField(key: "physical_memory", value: formattedBytes(processInfo.physicalMemory)),
+        DiagnosticField(key: "device_name", value: device.name),
+        DiagnosticField(key: "device_registry_id", value: "\(device.registryID)"),
+        DiagnosticField(key: "device_low_power", value: formattedBool(device.isLowPower)),
+        DiagnosticField(key: "device_headless", value: formattedBool(device.isHeadless)),
+        DiagnosticField(key: "device_removable", value: formattedBool(device.isRemovable)),
+        DiagnosticField(key: "device_has_unified_memory", value: formattedBool(device.hasUnifiedMemory)),
+        DiagnosticField(key: "device_location", value: describeDeviceLocation(device)),
+        DiagnosticField(key: "max_threads_per_threadgroup", value: formatThreadgroupSize(device.maxThreadsPerThreadgroup)),
+        DiagnosticField(key: "recommended_max_working_set_size", value: formattedBytes(device.recommendedMaxWorkingSetSize)),
+        DiagnosticField(key: "read_write_texture_support", value: "\(device.readWriteTextureSupport.rawValue)"),
+        DiagnosticField(key: "argument_buffers_support", value: "\(device.argumentBuffersSupport.rawValue)"),
+    ]
+
+    environmentFields.append(DiagnosticField(key: "supports_64bit_float", value: "unavailable (not exposed by current SDK)"))
+
+    let familySummary = supportedFamilies(for: device)
+    let featureFields = [
+        DiagnosticField(key: "gpu_families", value: familySummary.isEmpty ? "none reported" : familySummary.joined(separator: ", ")),
+    ]
+
+    return RunDiagnostics(configFields: configFields, environmentFields: environmentFields, featureFields: featureFields)
+}
+
+func diagnosticLines(_ fields: [DiagnosticField]) -> [String] {
+    fields.map { "\($0.key): \($0.value)" }
+}
+
+func variantSummaryLines(compiledVariants: [CompiledVariant]) -> [String] {
+    compiledVariants.map { compiledVariant in
+        let pipeline = compiledVariant.pipeline
+        return "\(compiledVariant.variant.name): threadLimited=\(compiledVariant.variant.threadLimited) requestedMaxThreads=\(compiledVariant.descriptor.maxTotalThreadsPerThreadgroup) pipelineMaxThreads=\(pipeline.maxTotalThreadsPerThreadgroup) executionWidth=\(pipeline.threadExecutionWidth) staticThreadgroupMemory=\(pipeline.staticThreadgroupMemoryLength)"
+    }
+}
+
 func writeText(_ text: String, to url: URL) throws {
     try text.write(to: url, atomically: true, encoding: .utf8)
 }
@@ -251,16 +430,26 @@ func makeBinaryArchive(device: MTLDevice, descriptor: MTLComputePipelineDescript
     try archive.serialize(to: url)
 }
 
-func emitArtifacts(compiledVariants: [CompiledVariant], device: MTLDevice, rootPath: String) throws {
+func renderSection(title: String, lines: [String]) -> String {
+    ([title] + lines).joined(separator: "\n") + "\n"
+}
+
+func emitArtifacts(compiledVariants: [CompiledVariant], device: MTLDevice, rootPath: String, diagnostics: RunDiagnostics) throws {
     let fileManager = FileManager.default
     let directory = URL(fileURLWithPath: rootPath, isDirectory: true)
     try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
 
     var manifestLines = [
-        "device: \(device.name)",
         "artifact_dir: \(directory.path)",
         "",
     ]
+    manifestLines.append(contentsOf: diagnosticLines(diagnostics.configFields))
+    manifestLines.append("")
+    manifestLines.append(contentsOf: diagnosticLines(diagnostics.environmentFields))
+    manifestLines.append("")
+    manifestLines.append(contentsOf: diagnosticLines(diagnostics.featureFields))
+    manifestLines.append("")
+    manifestLines.append("variant_directories:")
 
     for compiledVariant in compiledVariants {
         let variantDirectory = directory.appendingPathComponent(compiledVariant.variant.slug, isDirectory: true)
@@ -276,6 +465,7 @@ func emitArtifacts(compiledVariants: [CompiledVariant], device: MTLDevice, rootP
         variant: \(compiledVariant.variant.name)
         slug: \(compiledVariant.variant.slug)
         thread_limited: \(compiledVariant.variant.threadLimited)
+        descriptor.requestedMaxTotalThreadsPerThreadgroup: \(compiledVariant.descriptor.maxTotalThreadsPerThreadgroup)
         pipeline.maxTotalThreadsPerThreadgroup: \(compiledVariant.pipeline.maxTotalThreadsPerThreadgroup)
         pipeline.threadExecutionWidth: \(compiledVariant.pipeline.threadExecutionWidth)
         pipeline.staticThreadgroupMemoryLength: \(compiledVariant.pipeline.staticThreadgroupMemoryLength)
@@ -286,6 +476,13 @@ func emitArtifacts(compiledVariants: [CompiledVariant], device: MTLDevice, rootP
     }
 
     try writeText(manifestLines.joined(separator: "\n"), to: directory.appendingPathComponent("manifest.txt"))
+    let environmentReport = [
+        renderSection(title: "[config]", lines: diagnosticLines(diagnostics.configFields)),
+        renderSection(title: "[environment]", lines: diagnosticLines(diagnostics.environmentFields)),
+        renderSection(title: "[features]", lines: diagnosticLines(diagnostics.featureFields)),
+        renderSection(title: "[variants]", lines: variantSummaryLines(compiledVariants: compiledVariants)),
+    ].joined(separator: "\n")
+    try writeText(environmentReport, to: directory.appendingPathComponent("environment.txt"))
 }
 
 guard let device = MTLCreateSystemDefaultDevice() else {
@@ -297,22 +494,28 @@ let variants = makeVariants()
 
 do {
     let compiledVariants = try variants.map { try compileVariant($0, device: device) }
+    let diagnostics = makeRunDiagnostics(config: config, device: device)
 
     if config.dumpArtifacts {
-        try emitArtifacts(compiledVariants: compiledVariants, device: device, rootPath: config.artifactDirectory)
+        try emitArtifacts(compiledVariants: compiledVariants, device: device, rootPath: config.artifactDirectory, diagnostics: diagnostics)
     }
 
     let reference = try run(compiledVariant: compiledVariants[0], groups: config.groups, device: device)
     var observedFailure = false
 
     print("Metal barrier repro")
-    print("device: \(device.name)")
-    print("groups: \(config.groups)")
-    print("iterations: \(config.iterations)")
-    print("reference: fence baseline")
-    if config.dumpArtifacts {
-        print("artifacts: \(config.artifactDirectory)")
-    }
+    print("")
+    print("[config]")
+    diagnosticLines(diagnostics.configFields).forEach { print($0) }
+    print("")
+    print("[environment]")
+    diagnosticLines(diagnostics.environmentFields).forEach { print($0) }
+    print("")
+    print("[features]")
+    diagnosticLines(diagnostics.featureFields).forEach { print($0) }
+    print("")
+    print("[variants]")
+    variantSummaryLines(compiledVariants: compiledVariants).forEach { print($0) }
     print("")
 
     for compiledVariant in compiledVariants {
@@ -330,7 +533,13 @@ do {
             print("\(compiledVariant.variant.name): PASS")
         } else {
             observedFailure = true
-            print("\(compiledVariant.variant.name): FAIL mismatches=\(worst.mismatchCount) firstIndex=\(worst.firstMismatch!) expected=\(format(worst.expected!)) actual=\(format(worst.actual!))")
+            let firstIndex = worst.firstMismatch!
+            let firstGroup = firstIndex / 125
+            let firstLane = firstIndex % 125
+            let mismatchPercent = Double(worst.mismatchCount) / Double(reference.count) * 100.0
+            let delta = worst.actual! - worst.expected!
+            let mismatchPercentText = String(format: "%.2f", mismatchPercent)
+            print("\(compiledVariant.variant.name): FAIL mismatches=\(worst.mismatchCount) mismatchPercent=\(mismatchPercentText)% firstIndex=\(firstIndex) firstGroup=\(firstGroup) firstLane=\(firstLane) expected=\(format(worst.expected!)) actual=\(format(worst.actual!)) delta=\(format(delta))")
         }
     }
 
