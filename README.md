@@ -38,7 +38,7 @@ Arguments are:
 Flags are:
 
 - `--dump-runtime-artifacts`: writes per-variant shader source and runtime binary archives from Swift
-- `--artifact-dir <path>`: output directory for dumped artifacts, default `artifacts/latest`
+- `--artifact-dir <path>`: output directory for dumped artifacts, default `artifacts`
 
 What it does:
 

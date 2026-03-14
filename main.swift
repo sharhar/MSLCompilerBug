@@ -6,7 +6,7 @@ struct Config {
     var groups = 875
     var iterations = 3
     var dumpArtifacts = false
-    var artifactDirectory = "artifacts/latest"
+    var artifactDirectory = "artifacts"
 }
 
 func parseConfig(arguments: [String]) -> Config {

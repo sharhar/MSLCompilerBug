@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-artifact_dir="artifacts/latest"
+artifact_dir="artifacts"
 
 while (($# > 0)); do
   case "$1" in
