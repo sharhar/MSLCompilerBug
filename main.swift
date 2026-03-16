@@ -494,8 +494,28 @@ func makeReportLines(diagnostics: RunDiagnostics, compiledVariants: [CompiledVar
     return lines
 }
 
-guard let device = MTLCreateSystemDefaultDevice() else {
-    fputs("No Metal device found.\n", stderr)
+func pickMetalDevice() -> MTLDevice? {
+    let devices = MTLCopyAllDevices()
+
+    if devices.isEmpty {
+        return nil
+    }
+
+    if let device = MTLCreateSystemDefaultDevice() {
+        return device
+    }
+
+    if let discreteDevice = devices.first(where: { !$0.isLowPower }) {
+        return discreteDevice
+    }
+
+    return devices.first
+}
+
+guard let device = pickMetalDevice() else {
+    let visibleDevices = MTLCopyAllDevices().map(\.name)
+    let detail = visibleDevices.isEmpty ? "Metal reported zero usable devices." : "Visible devices: \(visibleDevices.joined(separator: ", "))"
+    fputs("No Metal device found. \(detail)\n", stderr)
     exit(1)
 }
 
