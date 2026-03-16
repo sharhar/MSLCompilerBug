@@ -340,22 +340,28 @@ func supportedFamilies(for device: MTLDevice) -> [String] {
     var families: [String] = []
 
     if #available(macOS 10.15, *) {
-        let familyChecks: [(String, MTLGPUFamily)] = [
-            ("apple1", .apple1),
-            ("apple2", .apple2),
-            ("apple3", .apple3),
-            ("apple4", .apple4),
-            ("apple5", .apple5),
-            ("apple6", .apple6),
-            ("apple7", .apple7),
-            ("apple8", .apple8),
-            ("apple9", .apple9),
-            ("mac1", .mac1),
-            ("mac2", .mac2),
+        // Build families from raw values so the script still compiles with
+        // older Metal SDKs that don't define the newest enum cases yet.
+        let familyChecks: [(String, Int)] = [
+            ("apple1", 1001),
+            ("apple2", 1002),
+            ("apple3", 1003),
+            ("apple4", 1004),
+            ("apple5", 1005),
+            ("apple6", 1006),
+            ("apple7", 1007),
+            ("apple8", 1008),
+            ("apple9", 1009),
+            ("apple10", 1010),
+            ("mac1", 2001),
+            ("mac2", 2002),
         ]
 
-        families = familyChecks.compactMap { label, family in
-            device.supportsFamily(family) ? label : nil
+        families = familyChecks.compactMap { label, rawValue in
+            guard let family = MTLGPUFamily(rawValue: rawValue) else {
+                return nil
+            }
+            return device.supportsFamily(family) ? label : nil
         }
     }
 
