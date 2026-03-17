@@ -56,8 +56,8 @@ Metal barrier repro
 groups: 875
 iterations: 3
 reference: fence baseline
-dump_runtime_artifacts: yes
-artifact_dir: artifacts
+dump_runtime_artifacts: no
+artifact_dir: disabled
 
 [environment]
 macos_version: Version 15.7.4 (Build 24G517)
@@ -66,6 +66,7 @@ kernel_version: Darwin 24.6.0 (Darwin Kernel Version 24.6.0: Mon Jan 19 21:56:28
 process_arch: arm64
 machine_arch: arm64
 machine_model: Mac14,9
+metal_compiler_version: Apple metal version 32023.864 (metalfe-32023.864)
 rosetta_translated: no
 physical_memory: 32 GB
 device_name: Apple M2 Pro
@@ -93,7 +94,7 @@ barrier thread_limited: threadLimited=true requestedMaxThreads=32 pipelineMaxThr
 fence baseline: PASS
 barrier baseline: PASS
 fence thread_limited: PASS
-barrier thread_limited: FAIL mismatches=109250 mismatchPercent=99.89% firstIndex=0 firstGroup=0 firstLane=0 expected=(-27.249022, -8.928854) actual=(-27.974909, -7.896999) delta=(-0.725887, 1.031855)
+barrier thread_limited: FAIL mismatches=109228 mismatchPercent=99.87% firstIndex=0 firstGroup=0 firstLane=0 expected=(-27.249022, -8.928854) actual=(-220244756752867115663360.000000, -17183654001808492770361344.000000) delta=(-220244756752867115663360.000000, -17183654001808492770361344.000000)
 
 overall: FAIL
 ```
