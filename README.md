@@ -1,68 +1,19 @@
-# Metal Barrier Repro
+# Metal Threadgroup Barrier Bug Repro
 
-Run:
+This repository is a repro for a bug in the Swift compiler's handling of `threadgroup_barrier` when compiling for Apple Silicon for execution with only 1 threadgroup.
 
-```bash
-swift -module-cache-path /tmp/swift-module-cache main.swift
-```
+The repro is contained in `main.swift`, which builds two shader variants that differ only in their use of `threadgroup_barrier` flags. One version uses `threadgroup_barrier(mem_flags::mem_threadgroup)`, while the other uses `threadgroup_barrier(mem_flags::mem_device | mem_flags::mem_threadgroup)`. The shader consists of calculations that utilize shared memory to transfer data between threads, and there is an if statement at the start of the shader limiting execution of the code to only the first 25 threads (which means that only one threadgroup is ever active in all invocations of the shader variants). When the shader is executed with `maxTotalThreadsPerThreadgroup=33` (which is one above the 32 wide threadgroups on apple silicon), both variants run and produce the correct results. However, when `maxTotalThreadsPerThreadgroup=32`, only the shader with the `mem_flags::mem_device` flag added to the barrier produce correct results, while the shader using only `mem_flags::mem_threadgroup` produces wrong output seemingly due to lack of proper data access synchropnization (or some other overly agressive compiler optimization that produces incorrect behavior).
 
-Optional:
+To run this repro, use the following command
 
 ```bash
-swift -module-cache-path /tmp/swift-module-cache main.swift 875 3
+swift main.swift
 ```
 
-To dump compiled artifacts for each variant from the Swift repro:
+Additionally, the repro can be used to dump the generated shader artifacts for inspection, which may be useful for debugging the issue. To do this, use the following command:
 
 ```bash
-swift -module-cache-path /tmp/swift-module-cache main.swift 64 3 --dump-runtime-artifacts
+swift main.swift --dump-runtime-artifacts
 ```
 
-You can also choose a custom output directory:
-
-```bash
-swift -module-cache-path /tmp/swift-module-cache main.swift 64 3 --dump-runtime-artifacts --artifact-dir artifacts/m2pro-run
-```
-
-To compile emitted `.metal` sources into `.air`/`.metallib` and produce best-effort disassembly for an existing artifact directory:
-
-```bash
-./disassemble.sh --artifact-dir artifacts/m2pro-run
-```
-
-Arguments are:
-
-1. threadgroup count, default `875`
-2. iteration count, default `3`
-
-Flags are:
-
-- `--dump-runtime-artifacts`: writes per-variant shader source and runtime binary archives from Swift
-- `--artifact-dir <path>`: output directory for dumped artifacts, default `artifacts`
-
-What it does:
-
-- builds two shader variants inside `main.swift`
-- runs each one through both pipeline paths
-- uses `fence baseline` as the reference output
-- fails if any other run differs from that reference
-
-When `--dump-runtime-artifacts` is enabled the Swift repro creates one directory per variant containing:
-
-- `<variant>.metal`: source emitted by the Swift repro
-- `<variant>.binarchive`: runtime binary archive emitted through `MTLBinaryArchive`
-- `metadata.txt`: pipeline properties such as `threadExecutionWidth`
-
-At the artifact root, the Swift repro also writes:
-
-- `manifest.txt`: artifact directory and per-variant paths
-- `stdout.txt`: exact stdout from the repro run, including diagnostics and test results
-
-After that, `./disassemble.sh --artifact-dir <path>` adds:
-
-- `<variant>.air`: AIR emitted by `xcrun metal`
-- `<variant>.metallib`: library emitted by `xcrun metallib`
-- `<variant>.S`: best-effort `metal-objdump` disassembly, when available
-
-On a buggy compiler, `barrier thread_limited` should fail while the other three lines pass.
-When the bug is fixed, all four lines should pass and the script exits `0`.
+This will also make a copy of stdout and record other metadata about the environment that may be useful for debugging.

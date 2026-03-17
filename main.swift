@@ -122,7 +122,7 @@ kernel void repro(
 let fenceSource = barrierSource.replacingOccurrences(
     of: "threadgroup_barrier(mem_flags::mem_threadgroup);",
     with: """
-    threadgroup_barrier(mem_flags::mem_device | mem_flags::mem_threadgroup | mem_flags::mem_texture);
+    threadgroup_barrier(mem_flags::mem_device | mem_flags::mem_threadgroup);
     """
 )
 
