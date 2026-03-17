@@ -1,0 +1,47 @@
+Metal barrier repro
+
+[config]
+groups: 875
+iterations: 3
+reference: fence baseline
+dump_runtime_artifacts: yes
+artifact_dir: artifacts
+
+[environment]
+macos_version: Version 15.7.4 (Build 24G517)
+macos_semver: 15.7.4
+kernel_version: Darwin 24.6.0 (Darwin Kernel Version 24.6.0: Mon Jan 19 21:56:28 PST 2026; root:xnu-11417.140.69.708.3~1/RELEASE_ARM64_T6020)
+process_arch: arm64
+machine_arch: arm64
+machine_model: Mac14,9
+metal_compiler_version: Apple metal version 32023.864 (metalfe-32023.864)
+rosetta_translated: no
+physical_memory: 32 GB
+device_name: Apple M2 Pro
+device_registry_id: 4294968568
+device_low_power: no
+device_headless: no
+device_removable: no
+device_has_unified_memory: yes
+device_location: builtIn
+max_threads_per_threadgroup: 1024x1024x1024
+recommended_max_working_set_size: 21.33 GB
+read_write_texture_support: 2
+argument_buffers_support: 1
+supports_64bit_float: unavailable (not exposed by current SDK)
+
+[features]
+gpu_families: apple1, apple2, apple3, apple4, apple5, apple6, apple7, apple8, mac1, mac2
+
+[variants]
+fence baseline: threadLimited=false requestedMaxThreads=33 pipelineMaxThreads=33 executionWidth=32 staticThreadgroupMemory=1008
+barrier baseline: threadLimited=false requestedMaxThreads=33 pipelineMaxThreads=33 executionWidth=32 staticThreadgroupMemory=1008
+fence thread_limited: threadLimited=true requestedMaxThreads=32 pipelineMaxThreads=32 executionWidth=32 staticThreadgroupMemory=1008
+barrier thread_limited: threadLimited=true requestedMaxThreads=32 pipelineMaxThreads=32 executionWidth=32 staticThreadgroupMemory=1008
+
+fence baseline: PASS
+barrier baseline: PASS
+fence thread_limited: PASS
+barrier thread_limited: FAIL mismatches=109251 mismatchPercent=99.89% firstIndex=0 firstGroup=0 firstLane=0 expected=(-27.249022, -8.928854) actual=(-27.974909, -7.896999) delta=(-0.725887, 1.031855)
+
+overall: FAIL

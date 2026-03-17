@@ -1,0 +1,8 @@
+variant: fence thread_limited
+slug: fence-thread-limited
+thread_limited: true
+descriptor.requestedMaxTotalThreadsPerThreadgroup: 32
+pipeline.maxTotalThreadsPerThreadgroup: 32
+pipeline.threadExecutionWidth: 32
+pipeline.staticThreadgroupMemoryLength: 1008
+binary_archive: fence-thread-limited.binarchive

@@ -98,7 +98,7 @@ barrier thread_limited: threadLimited=true requestedMaxThreads=32 pipelineMaxThr
 fence baseline: PASS
 barrier baseline: PASS
 fence thread_limited: PASS
-barrier thread_limited: FAIL mismatches=109228 mismatchPercent=99.87% firstIndex=0 firstGroup=0 firstLane=0 expected=(-27.249022, -8.928854) actual=(-220244756752867115663360.000000, -17183654001808492770361344.000000) delta=(-220244756752867115663360.000000, -17183654001808492770361344.000000)
+barrier thread_limited: FAIL mismatches=109227 mismatchPercent=99.86% firstIndex=0 firstGroup=0 firstLane=0 expected=(-27.249022, -8.928854) actual=(-28.246582, -7.701342) delta=(-0.997561, 1.227512)
 
 overall: FAIL
 ```

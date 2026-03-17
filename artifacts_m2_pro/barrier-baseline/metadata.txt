@@ -1,0 +1,8 @@
+variant: barrier baseline
+slug: barrier-baseline
+thread_limited: false
+descriptor.requestedMaxTotalThreadsPerThreadgroup: 33
+pipeline.maxTotalThreadsPerThreadgroup: 33
+pipeline.threadExecutionWidth: 32
+pipeline.staticThreadgroupMemoryLength: 1008
+binary_archive: barrier-baseline.binarchive

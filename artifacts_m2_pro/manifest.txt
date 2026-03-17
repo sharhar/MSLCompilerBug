@@ -1,0 +1,7 @@
+artifact_dir: /Users/shaharsandhaus/MSLCompilerBug/artifacts
+
+variant_directories:
+fence-baseline: /Users/shaharsandhaus/MSLCompilerBug/artifacts/fence-baseline
+barrier-baseline: /Users/shaharsandhaus/MSLCompilerBug/artifacts/barrier-baseline
+fence-thread-limited: /Users/shaharsandhaus/MSLCompilerBug/artifacts/fence-thread-limited
+barrier-thread-limited: /Users/shaharsandhaus/MSLCompilerBug/artifacts/barrier-thread-limited
