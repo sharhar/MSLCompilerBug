@@ -305,6 +305,28 @@ func kernelVersion() -> String {
     return "\(sysname) \(release) (\(version))"
 }
 
+func metalCompilerVersion() -> String {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+    process.arguments = ["metal", "--version"]
+
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = Pipe()
+
+    do {
+        try process.run()
+        process.waitUntilExit()
+    } catch {
+        return "unavailable"
+    }
+
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    let output = String(data: data, encoding: .utf8) ?? ""
+    let firstLine = output.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
+    return firstLine.isEmpty ? "unavailable" : firstLine
+}
+
 func rosettaStatus() -> String {
     guard let translated = sysctlInt32("sysctl.proc_translated") else {
         return "unavailable"
@@ -386,6 +408,7 @@ func makeRunDiagnostics(config: Config, device: MTLDevice) -> RunDiagnostics {
         DiagnosticField(key: "process_arch", value: currentProcessArchitecture()),
         DiagnosticField(key: "machine_arch", value: machineArchitecture()),
         DiagnosticField(key: "machine_model", value: sysctlString("hw.model") ?? "unavailable"),
+        DiagnosticField(key: "metal_compiler_version", value: metalCompilerVersion()),
         DiagnosticField(key: "rosetta_translated", value: rosettaStatus()),
         DiagnosticField(key: "physical_memory", value: formattedBytes(processInfo.physicalMemory)),
         DiagnosticField(key: "device_name", value: device.name),
