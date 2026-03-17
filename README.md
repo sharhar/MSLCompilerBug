@@ -1,14 +1,27 @@
 # Metal Threadgroup Barrier Bug Repro
 
-This repository is a repro for a bug in the Metal/Swift shader compilation pipeline on Apple Silicon involving `threadgroup_barrier` and pipeline specialization via `maxTotalThreadsPerThreadgroup`.
+This repository contains a reproducible case on Apple Silicon where compute kernel output changes based on the pipeline's `maxTotalThreadsPerThreadgroup` specialization when using `threadgroup_barrier(mem_flags::mem_threadgroup)`.
 
-The repro is contained in `main.swift`, which builds two shader variants that differ only in their use of `threadgroup_barrier` flags. One version uses `threadgroup_barrier(mem_flags::mem_threadgroup)`, while the other uses `threadgroup_barrier(mem_flags::mem_device | mem_flags::mem_threadgroup)`.
+The repro is contained in `main.swift`. It builds two shader variants that differ only in their barrier flags:
 
-The important trigger is not the dispatched thread count. The kernel is always dispatched with `threadsPerThreadgroup=25`, and there is also an `if (tid >= 25) return;` guard at the top of the shader so only the first 25 lanes ever participate in the computation. In other words, the shader never has 32 or more active threads doing useful work, so changing the pipeline's `maxTotalThreadsPerThreadgroup` from 33 to 32 should not matter semantically for this kernel.
+- `threadgroup_barrier(mem_flags::mem_threadgroup)`
+- `threadgroup_barrier(mem_flags::mem_device | mem_flags::mem_threadgroup)`
 
-However, it does matter in practice. The repro builds each shader twice: once with `maxTotalThreadsPerThreadgroup=33`, and once with `maxTotalThreadsPerThreadgroup=32`. With `maxTotalThreadsPerThreadgroup=33`, both barrier variants produce correct results. With `maxTotalThreadsPerThreadgroup=32`, the variant using only `mem_flags::mem_threadgroup` produces incorrect output, while the variant using `mem_flags::mem_device | mem_flags::mem_threadgroup` still produces correct results.
+Each variant is compiled twice: once with `maxTotalThreadsPerThreadgroup=33`, and once with `maxTotalThreadsPerThreadgroup=32`.
 
-That makes this repo a repro for a bug whose trigger appears to be pipeline specialization on `maxTotalThreadsPerThreadgroup`, even though the kernel itself never uses 32 active threads.
+The kernel is always dispatched with `threadsPerThreadgroup=25`, and it also contains an `if (tid >= 25) return;` guard at the top of the shader. As a result, only the first 25 lanes ever participate in the computation. From the kernel's perspective, no execution path requires 32 active threads.
+
+Observed behavior:
+
+- With `maxTotalThreadsPerThreadgroup=33`, both shader variants produce correct results.
+- With `maxTotalThreadsPerThreadgroup=32`, the variant using only `mem_flags::mem_threadgroup` produces incorrect output.
+- With `maxTotalThreadsPerThreadgroup=32`, the variant using `mem_flags::mem_device | mem_flags::mem_threadgroup` continues to produce correct output.
+
+Expected behavior:
+
+- Reducing `maxTotalThreadsPerThreadgroup` from 33 to 32 should not change the result for this kernel, because only 25 threads ever participate in the computation.
+
+This suggests an issue related to pipeline specialization on `maxTotalThreadsPerThreadgroup` in the presence of `threadgroup_barrier(mem_flags::mem_threadgroup)`.
 
 To run this repro, use the following command
 
@@ -22,4 +35,4 @@ Additionally, the repro can be used to dump the generated shader artifacts for i
 swift main.swift --dump-runtime-artifacts
 ```
 
-This will also make a copy of stdout and record other metadata about the environment that may be useful for debugging.
+This also writes a copy of stdout and environment metadata that may be useful for debugging.
