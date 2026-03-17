@@ -49,9 +49,7 @@ Additionally, the repro can be used to dump the generated shader artifacts for i
 swift main.swift --dump-runtime-artifacts
 ```
 
-This also writes a copy of stdout and environment metadata that may be useful for debugging.
-
-When run on a Macbook Pro with an M2 Pro chip, the repro produces the following output:
+This also writes a copy of stdout and environment metadata that may be useful for debugging. A copy of these files from the machine where this repro was developed (a Macbook Pro with an M2 Pro chip) is included in the `artifacts_m2_pro` directory for reference. When the repro is run on said machine, it produces the following output:
 
 ```
 Metal barrier repro
