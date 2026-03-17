@@ -13,6 +13,10 @@ The kernel is always dispatched with `threadsPerThreadgroup=25`, and it also con
 
 That is why changing `maxTotalThreadsPerThreadgroup` from `33` to `32` should not change the result. In both cases, the pipeline limit remains greater than or equal to the actual launched threadgroup size of 25, and the shader immediately exits any lane with `tid >= 25`. No code path in the kernel depends on lanes 25 through 31 existing, and no dispatch in this repro ever asks Metal to run more than 25 threads per threadgroup. So the 33 vs 32 specialization should be observationally equivalent for this kernel.
 
+Apple's WWDC20 session [Bring your Metal app to Apple silicon Macs](https://developer.apple.com/videos/play/wwdc2020/10631/) also supports the expectation that `mem_flags::mem_threadgroup` should be sufficient for this kernel. In the session's threadgroup-memory synchronization example, Apple describes threadgroup memory as the shared state that "needs to be properly synchronized for correct ordering" and shows the correct implementation using `threadgroup_barrier(mem_flags::mem_threadgroup)` for cross-thread communication through threadgroup memory. That matches this repro's communication pattern: the synchronized shared state is the `threadgroup` array, not a `device` buffer.
+
+Because this repro only uses barriers to order accesses to threadgroup memory, adding `mem_flags::mem_device` should not be necessary to make the kernel correct. The `mem_device | mem_threadgroup` variant is included here as a comparison point only.
+
 Observed behavior:
 
 - With `maxTotalThreadsPerThreadgroup=33`, both shader variants produce correct results.
